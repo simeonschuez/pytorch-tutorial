@@ -1,5 +1,4 @@
 import torch
-import torchvision.transforms as transforms
 import torch.utils.data as data
 import os
 import pickle
@@ -7,36 +6,34 @@ import numpy as np
 import nltk
 from PIL import Image
 from build_vocab import Vocabulary
-from pycocotools.coco import COCO
-
 
 class CocoDataset(data.Dataset):
     """COCO Custom Dataset compatible with torch.utils.data.DataLoader."""
-    def __init__(self, root, json, vocab, transform=None):
+    def __init__(self, img_dir, df, vocab, transform=None):
         """Set the path for images, captions and vocabulary wrapper.
         
         Args:
-            root: image directory.
-            json: coco annotation file path.
+            img_dir: image directory.
+            df: data frame with information necessary.
             vocab: vocabulary wrapper.
             transform: image transformer.
         """
-        self.root = root
-        self.coco = COCO(json)
-        self.ids = list(self.coco.anns.keys())
+        self.img_dir = img_dir
+        self.df = df
+        self.ids = df.index.to_list()
         self.vocab = vocab
         self.transform = transform
 
     def __getitem__(self, index):
         """Returns one data pair (image and caption)."""
-        coco = self.coco
+        df = self.df
         vocab = self.vocab
         ann_id = self.ids[index]
-        caption = coco.anns[ann_id]['caption']
-        img_id = coco.anns[ann_id]['image_id']
-        path = coco.loadImgs(img_id)[0]['file_name']
+        caption = df.loc[ann_id]['caption']
+        img_id = df.loc[ann_id]['image_id']
+        path = filename_from_id(img_id, prefix = 'COCO_train2014_')
 
-        image = Image.open(os.path.join(self.root, path)).convert('RGB')
+        image = Image.open(os.path.join(self.img_dir, path)).convert('RGB')
         if self.transform is not None:
             image = self.transform(image)
 
@@ -52,6 +49,11 @@ class CocoDataset(data.Dataset):
     def __len__(self):
         return len(self.ids)
 
+def filename_from_id(image_id,prefix='',dir_ending=''):
+    # pad image ids with zeroes, add file prefix and file ending
+    filename = str(image_id).rjust(12,'0')
+    filename = prefix+filename+'.jpg'
+    return (filename)
 
 def collate_fn(data):
     """Creates mini-batch tensors from the list of tuples (image, caption).
@@ -84,11 +86,11 @@ def collate_fn(data):
         targets[i, :end] = cap[:end]        
     return images, targets, lengths
 
-def get_loader(root, json, vocab, transform, batch_size, shuffle, num_workers):
+def get_loader(img_dir, df, vocab, transform, batch_size, shuffle, num_workers):
     """Returns torch.utils.data.DataLoader for custom coco dataset."""
     # COCO caption dataset
-    coco = CocoDataset(root=root,
-                       json=json,
+    coco = CocoDataset(img_dir=img_dir,
+                       df=df,
                        vocab=vocab,
                        transform=transform)
     

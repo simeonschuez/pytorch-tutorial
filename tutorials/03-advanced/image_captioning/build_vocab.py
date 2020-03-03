@@ -1,9 +1,14 @@
 import nltk
+nltk.download('punkt')
 import pickle
-import argparse
 from collections import Counter
-from pycocotools.coco import COCO
 
+import configparser
+import pandas as pd
+import os
+import json
+config = configparser.ConfigParser()
+config.read('config.ini')
 
 class Vocabulary(object):
     """Simple vocabulary wrapper."""
@@ -25,14 +30,13 @@ class Vocabulary(object):
 
     def __len__(self):
         return len(self.word2idx)
-
-def build_vocab(json, threshold):
+    
+def build_vocab(df, threshold):
     """Build a simple vocabulary wrapper."""
-    coco = COCO(json)
     counter = Counter()
-    ids = coco.anns.keys()
+    ids = df.index
     for i, id in enumerate(ids):
-        caption = str(coco.anns[id]['caption'])
+        caption = str(df.loc[id]['caption'])
         tokens = nltk.tokenize.word_tokenize(caption.lower())
         counter.update(tokens)
 
@@ -54,23 +58,26 @@ def build_vocab(json, threshold):
         vocab.add_word(word)
     return vocab
 
-def main(args):
-    vocab = build_vocab(json=args.caption_path, threshold=args.threshold)
-    vocab_path = args.vocab_path
+def main(caption_path, vocab_path, threshold):    
+    
+    with open(caption_path + 'captions_train2014.json') as file: 
+        file = json.load(file)
+        captions = pd.DataFrame(file['annotations']).set_index('id')
+    
+    vocab = build_vocab(df=captions, threshold=threshold)
     with open(vocab_path, 'wb') as f:
         pickle.dump(vocab, f)
     print("Total vocabulary size: {}".format(len(vocab)))
     print("Saved the vocabulary wrapper to '{}'".format(vocab_path))
-
-
+    
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--caption_path', type=str, 
-                        default='data/annotations/captions_train2014.json', 
-                        help='path for train annotation file')
-    parser.add_argument('--vocab_path', type=str, default='./data/vocab.pkl', 
-                        help='path for saving vocabulary wrapper')
-    parser.add_argument('--threshold', type=int, default=4, 
-                        help='minimum word count threshold')
-    args = parser.parse_args()
-    main(args)
+    
+    coco_data_dir = config['MSCOCO']['data-path']
+    coco_annotations = coco_data_dir+'annotations/'
+    out_dir = config['ALL']['output_dir']
+    
+    main(
+        caption_path=coco_annotations,
+        vocab_path=out_dir+'vocab.pkl',
+        threshold=4
+    )
